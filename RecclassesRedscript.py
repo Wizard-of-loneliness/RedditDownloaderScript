@@ -138,7 +138,7 @@ class Interfaces:
 def downloader(touple_list):
     for tuple_ in touple_list:
         localpath, https_respone = tuple_[0], tuple_[1]
-        while localpath[-1] not in ['g', 'f', '4', 'v']:
+        while localpath[-1] not in ['g', 'f', '4']:
             localpath = localpath[:-1]
         with open(localpath, 'wb') as f:
             f.write(https_respone.content)
@@ -283,6 +283,29 @@ def paramsetter(setting_type):
     return param, range_pass
 
 
+def downloaderwithGfyscrape(hot_post, subreddit_POS):
+    try:
+        downloadprocess(hot_post, subreddit_POS)
+    except Exception as e0:
+        old = hot_post.url
+        if str(e0) == "'gfyItem'":
+            try:
+                Interfacescrape = Interfaces()
+                DBInterface = DBInnterfaces()
+                touple_list = Interfacescrape.gfyscrape(old)
+                downloader(touple_list)
+                DBInterface.DBcommitter(hot_post, subreddit_POS)
+            except Exception as scrap_error:
+                print(scrap_error)
+                logging.warning(
+                    str(hot_post)+'    ' + old+'    '+str(scrap_error).replace(' ', '_'))
+        else:
+            DBInterface = DBInnterfaces()
+            print('check logs for more Info............')
+            logging.warning(str(hot_post)+'    ' + old + '    '+str(e0))
+            DBInterface.DBcommitter(hot_post, subreddit_POS)
+
+
 print(f'\nDefault value for setting type is {default_setting_type}')
 print(f'Default value for limit is {defaultlimit}')
 print('provide null values to continue with default values......\n')
@@ -312,26 +335,7 @@ for subreddit_POS in subreddits:
             hot_posts = subreddit.controversial(
                 range_value, limit=limitbuffer)
     for hot_post in hot_posts:
-        try:
-            downloadprocess(hot_post, subreddit_POS)
-        except Exception as e0:
-            old = hot_post.url
-            if str(e0) == "'gfyItem'":
-                try:
-                    Interfacescrape = Interfaces()
-                    DBInterface = DBInnterfaces()
-                    touple_list = Interfacescrape.gfyscrape(old)
-                    downloader(touple_list)
-                    DBInterface.DBcommitter(hot_post, subreddit_POS)
-                except Exception as scrap_error:
-                    print(scrap_error)
-                    logging.warning(
-                        str(hot_post)+'    ' + old+'    '+str(scrap_error).replace(' ', '_'))
-            else:
-                DBInterface = DBInnterfaces()
-                print('check logs for more Info............')
-                logging.warning(str(hot_post)+'    ' + old + '    '+str(e0))
-                DBInterface.DBcommitter(hot_post, subreddit_POS)
+        downloaderwithGfyscrape(hot_post, subreddit_POS)
 
 mydb.close()
 cleanup()
