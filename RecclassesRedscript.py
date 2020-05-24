@@ -29,6 +29,7 @@ default_range = AuthandGVs.default_range
 default_setting_type = AuthandGVs.default_setting_type
 defaultlimit = AuthandGVs.defaultlimit
 NewIDcounter = 0
+sheerlist_dict = {}
 
 
 class Interfaces:
@@ -46,26 +47,65 @@ class Interfaces:
 
     def gfyvid(self, old):
         self.old = old
-        gfyID = self.old[len(self.old)-self.old[::-1].index('/')::]
-        gfyAPI_res = requests.get(f'https://api.gfycat.com/v1/gfycats/{gfyID}')
-        gfyJson_res = json.loads(gfyAPI_res.text)
-        gfyvid_url = gfyJson_res['gfyItem']['mp4Url']
-        new = download_path + gfyID + '.mp4'
-        image_response = requests.get(gfyvid_url)
-        return [(new, image_response)]
+        try:
+            gfyID = self.old[len(self.old)-self.old[::-1].index('/')::]
+            gfyAPI_res = requests.get(
+                f'https://api.gfycat.com/v1/gfycats/{gfyID}')
+            gfyJson_res = json.loads(gfyAPI_res.text)
+            gfyvid_url = gfyJson_res['gfyItem']['mp4Url']
+            new = download_path + gfyID + '.mp4'
+            image_response = requests.get(gfyvid_url)
+            return [(new, image_response)]
+        except Exception as gfyAPIError:
+            if str(gfyAPIError) == "'gfyItem'":
+                try:
+                    print(
+                        'Attempting to scrape the link off of HTML response..........')
+                    html_respone = requests.get(self.old).text
+                    start_index = html_respone.find(
+                        'og:video:secure_url\" content=') + 30
+                    splitlist = html_respone[start_index::].split('\"')
+                    file_link = splitlist[0]
+                    print(file_link)
+                    new = download_path + \
+                        file_link[len(file_link)-file_link[::-1].index('/')::]
+                    image_response = requests.get(file_link)
+                    return [(new, image_response)]
+                except Exception as scrap_error:
+                    print(scrap_error)
+                    logging.warning(str(hot_post)+'    ' + old +
+                                    '    '+str(scrap_error).replace(' ', '_'))
 
     def imgur(self, old):
         self.old = old
         imgurID = self.old[len(self.old)-self.old[::-1].index('/')::]
         header = {'Authorization': f'Client-ID {AuthandGVs.Imgur_ClientID}'}
-        imgurAPI_res = requests.get(
-            f'https://api.imgur.com/3/image/{imgurID}', headers=header)
-        imgurJson_res = json.loads(imgurAPI_res.text)
-        file_link = imgurJson_res['data']['link']
-        new = download_path + \
-            file_link[len(file_link)-file_link[::-1].index('/')::]
-        image_response = requests.get(file_link)
-        return [(new, image_response)]
+        file_link_list = []
+        touple_list = [('', '')]
+        if ('imgur.com/a/') not in self.old:
+            imgurAPI_res = requests.get(
+                f'https://api.imgur.com/3/image/{imgurID}', headers=header)
+            imgurJson_res = json.loads(imgurAPI_res.text)
+            file_link_list = [imgurJson_res['data']['link']]
+        else:
+            imgurAPI_res = requests.get(
+                f"https://api.imgur.com/3/album/{imgurID}/images", headers=header)
+            imgurJson_res = json.loads(imgurAPI_res.text)
+            file_link_buffer = imgurJson_res['data']
+            for fille_link_dict in file_link_buffer:
+                file_link_list.append(fille_link_dict['link'])
+        if len(file_link_list) < 11:
+            localpath_list, mediares_list = [], []
+            for file_link in file_link_list:
+                new = download_path + \
+                    file_link[len(file_link)-file_link[::-1].index('/')::]
+                localpath_list.append(new)
+                media_response = requests.get(file_link)
+                mediares_list.append(media_response)
+            touple_list = list(zip(localpath_list, mediares_list))
+        else:
+            sheerlist_dict[imgurID] = file_link_list
+        return touple_list
 
     def RedditVideo(self, old, fallback_url):
         self.old = old
@@ -74,19 +114,6 @@ class Interfaces:
         new = download_path + regex + '.mp4'
         video_response = requests.get(self.fallback_url)
         return [(new, video_response)]
-
-    def gfyscrape(self, old):
-        self.old = old
-        print('Attempting to scrape the link off of HTML response..........')
-        html_respone = requests.get(self.old).text
-        start_index = html_respone.find('og:video:secure_url\" content=') + 30
-        splitlist = html_respone[start_index::].split('\"')
-        file_link = splitlist[0]
-        print(file_link)
-        new = download_path + \
-            file_link[len(file_link)-file_link[::-1].index('/')::]
-        image_response = requests.get(file_link)
-        return [(new, image_response)]
 
     def selfpostfunc(self, hot_post):
         self.hot_post = hot_post
@@ -137,13 +164,17 @@ class Interfaces:
 
 def downloader(touple_list):
     for tuple_ in touple_list:
-        localpath, https_respone = tuple_[0], tuple_[1]
-        while localpath[-1] not in ['g', 'f', '4']:
-            localpath = localpath[:-1]
-        with open(localpath, 'wb') as f:
-            f.write(https_respone.content)
-        global NewIDcounter
-        NewIDcounter += 1
+        localpath, https_respone = tuple_
+        if (localpath == ''):
+            print(
+                "Download averted due to passing of null values to Downloader function...........")
+        else:
+            while localpath[-1] not in ['g', 'f', '4']:
+                localpath = localpath[:-1]
+            with open(localpath, 'wb') as f:
+                f.write(https_respone.content)
+            global NewIDcounter
+            NewIDcounter += 1
 
 
 def cleanup(path=download_path):
@@ -283,27 +314,25 @@ def paramsetter(setting_type):
     return param, range_pass
 
 
-def downloaderwithGfyscrape(hot_post, subreddit_POS):
-    try:
-        downloadprocess(hot_post, subreddit_POS)
-    except Exception as e0:
-        old = hot_post.url
-        if str(e0) == "'gfyItem'":
-            try:
-                Interfacescrape = Interfaces()
-                DBInterface = DBInnterfaces()
-                touple_list = Interfacescrape.gfyscrape(old)
-                downloader(touple_list)
-                DBInterface.DBcommitter(hot_post, subreddit_POS)
-            except Exception as scrap_error:
-                print(scrap_error)
-                logging.warning(
-                    str(hot_post)+'    ' + old+'    '+str(scrap_error).replace(' ', '_'))
+def Sheerdownloadprocess():
+    for id, links in sheerlist_dict.items():
+        print(f'No. of links associated with {id} are {len(links)}')
+    if sheerlist_dict == {}:
+        print('No links found in sheer Dictionary\n')
+    else:
+        sheer_input = input(
+            "press Y(or anything) to proceed with sheer downloads\npress N to continue without sheer downloads...:")
+        if sheer_input.lower()[0] == 'n':
+            print("Cancelling sheer Downloads.......................... ")
         else:
-            DBInterface = DBInnterfaces()
-            print('check logs for more Info............')
-            logging.warning(str(hot_post)+'    ' + old + '    '+str(e0))
-            DBInterface.DBcommitter(hot_post, subreddit_POS)
+            Interface = Interfaces()
+            for listoflinks in sheerlist_dict.values():
+                for link in listoflinks:
+                    if '.gifv' in link:
+                        touple_list = Interface.gifvtomp4(link)
+                    else:
+                        touple_list = Interface.directimage(link)
+                    downloader(touple_list)
 
 
 print(f'\nDefault value for setting type is {default_setting_type}')
@@ -335,9 +364,13 @@ for subreddit_POS in subreddits:
             hot_posts = subreddit.controversial(
                 range_value, limit=limitbuffer)
     for hot_post in hot_posts:
-        downloaderwithGfyscrape(hot_post, subreddit_POS)
-
+        try:
+            downloadprocess(hot_post, subreddit_POS)
+        except Exception as e:
+            logging.warning(str(hot_post)+'    ' + hot_post.url +
+                            '    '+str(e).replace(' ', '_'))
 mydb.close()
+Sheerdownloadprocess()
 cleanup()
 print(f"\n{NewIDcounter} new post(s) have been downloaded.........\n")
 showlogs()
