@@ -107,13 +107,18 @@ class Interfaces:
             sheerlist_dict[imgurID] = file_link_list
         return touple_list
 
-    def RedditVideo(self, old, fallback_url):
+    def RedditVideo(self, old, hot_post):
         self.old = old
-        self.fallback_url = fallback_url
+        self.hot_post = hot_post
         regex = self.old[len(self.old)-self.old[::-1].index('/')::]
         new = download_path + regex + '.mp4'
-        video_response = requests.get(self.fallback_url)
-        return [(new, video_response)]
+        try:
+            fallback_url = self.hot_post.media['reddit_video']['fallback_url']
+            video_response = requests.get(fallback_url)
+            return [(new, video_response)]
+        except TypeError:
+            cross_post = self.crosspostIDpasser(self.hot_post)
+            downloadprocess(cross_post, subreddit_POS)
 
     def selfpostfunc(self, hot_post):
         self.hot_post = hot_post
@@ -160,6 +165,12 @@ class Interfaces:
         regex = mp4url[len(mp4url)-mp4url[::-1].index('/')::]
         new = download_path + regex
         return [(new, video_response)]
+
+    def crosspostIDpasser(self, hot_post):
+        self.hot_post = hot_post
+        cross_post = reddit.submission(
+            self.hot_post.crosspost_parent.split('_')[1])
+        return cross_post
 
 
 def downloader(touple_list):
@@ -242,9 +253,7 @@ def downloadprocess(hot_post, subreddit_POS):
                 touple_list = Interface.gifvtomp4(old)
                 downloader(touple_list)
             elif 'v.redd.it' in old:
-                fallback_url = hot_post.media['reddit_video']['fallback_url']
-                touple_list = Interface.RedditVideo(
-                    old, fallback_url)
+                touple_list = Interface.RedditVideo(old, hot_post)
                 downloader(touple_list)
             elif ('.png' in old) or ('.jpg' in old) or ('.gif' in old) or ('.jpeg' in old) or ('.mp4' in old):
                 touple_list = Interface.directimage(old)
@@ -261,12 +270,11 @@ def downloadprocess(hot_post, subreddit_POS):
                     downloader(touple_list)
                 except:
                     print('Non-media Item found.......................')
-
             elif ('/r/' in old) and ('/comments/' in old):
                 try:
-                    cross_post = reddit.submission(
-                        hot_post.crosspost_parent.split('_')[1])
+                    cross_post = Interface.crosspostIDpasser(hot_post)
                     print('Cross post found...................')
+                    downloadprocess(cross_post, subreddit_POS)
                 except:
                     print("Not a cross-post...Using ID from URL.......")
                     startindex = old.index('/comments/')+10
