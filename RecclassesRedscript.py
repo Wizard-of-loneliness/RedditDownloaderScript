@@ -351,7 +351,7 @@ def Sheerdownloadprocess():
                     print(
                         'please enter digits seperated by commas with no spaces from the above list.!')
                     continue
-                except IndexError:
+                except KeyError:
                     print('Please enter the exact values from the aboove list...!')
                     continue
                 else:
