@@ -81,7 +81,7 @@ class Interfaces:
         imgurID = self.old[len(self.old)-self.old[::-1].index('/')::]
         header = {'Authorization': f'Client-ID {AuthandGVs.Imgur_ClientID}'}
         file_link_list = []
-        touple_list = [('', '')]
+        touple_list = [('', None)]
         if ('imgur.com/a/') not in self.old:
             imgurAPI_res = requests.get(
                 f'https://api.imgur.com/3/image/{imgurID}', headers=header)
@@ -340,11 +340,23 @@ def Sheerdownloadprocess():
             print("Cancelling sheer Downloads.......................... ")
         else:
             actual_dict = {}
-            prompti = input(
-                "choose numbers from above list, seperate numbers by ','(No spaces):")
-            prompti_list = prompti.split(',')
-            for choice in prompti_list:
-                actual_dict[int(choice)] = sheerbuffer[int(choice)]
+            while True:
+                try:
+                    prompti = input(
+                        "choose numbers from above list, seperate numbers by ','(No spaces):")
+                    prompti_list = prompti.split(',')
+                    for choice in prompti_list:
+                        actual_dict[int(choice)] = sheerbuffer[int(choice)]
+                except ValueError:
+                    print(
+                        'please enter digits seperated by commas with no spaces from the above list.!')
+                    continue
+                except IndexError:
+                    print('Please enter the exact values from the aboove list...!')
+                    continue
+                else:
+                    print('values accepted......!')
+                    break
             Interface = Interfaces()
             for listoflinks in actual_dict.values():
                 for link in listoflinks:
