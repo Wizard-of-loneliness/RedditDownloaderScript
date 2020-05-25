@@ -107,9 +107,10 @@ class Interfaces:
             sheerlist_dict[imgurID] = file_link_list
         return touple_list
 
-    def RedditVideo(self, old, hot_post):
+    def RedditVideo(self, old, hot_post, subreddit_POS):
         self.old = old
         self.hot_post = hot_post
+        self.subreddit_POS = subreddit_POS
         regex = self.old[len(self.old)-self.old[::-1].index('/')::]
         new = download_path + regex + '.mp4'
         try:
@@ -118,7 +119,7 @@ class Interfaces:
             return [(new, video_response)]
         except TypeError:
             cross_post = self.crosspostIDpasser(self.hot_post)
-            downloadprocess(cross_post, subreddit_POS)
+            downloadprocess(cross_post, self.subreddit_POS)
 
     def selfpostfunc(self, hot_post):
         self.hot_post = hot_post
@@ -253,7 +254,8 @@ def downloadprocess(hot_post, subreddit_POS):
                 touple_list = Interface.gifvtomp4(old)
                 downloader(touple_list)
             elif 'v.redd.it' in old:
-                touple_list = Interface.RedditVideo(old, hot_post)
+                touple_list = Interface.RedditVideo(
+                    old, hot_post, subreddit_POS)
                 downloader(touple_list)
             elif ('.png' in old) or ('.jpg' in old) or ('.gif' in old) or ('.jpeg' in old) or ('.mp4' in old):
                 touple_list = Interface.directimage(old)
@@ -323,18 +325,28 @@ def paramsetter(setting_type):
 
 
 def Sheerdownloadprocess():
-    for id, links in sheerlist_dict.items():
-        print(f'No. of links associated with {id} are {len(links)}')
     if sheerlist_dict == {}:
         print('No links found in sheer Dictionary\n')
     else:
+        serial = 0
+        sheerbuffer = {}
+        for id, links in sheerlist_dict.items():
+            serial += 1
+            sheerbuffer[serial] = sheerlist_dict[id]
+            print(f'{serial}) No.of links associated with {id} are {len(links)}')
         sheer_input = input(
             "press Y(or anything) to proceed with sheer downloads\npress N to continue without sheer downloads...:")
         if sheer_input.lower()[0] == 'n':
             print("Cancelling sheer Downloads.......................... ")
         else:
+            actual_dict = {}
+            prompti = input(
+                "choose numbers from above list, seperate numbers by ','(No spaces):")
+            prompti_list = prompti.split(',')
+            for choice in prompti_list:
+                actual_dict[int(choice)] = sheerbuffer[int(choice)]
             Interface = Interfaces()
-            for listoflinks in sheerlist_dict.values():
+            for listoflinks in actual_dict.values():
                 for link in listoflinks:
                     if '.gifv' in link:
                         touple_list = Interface.gifvtomp4(link)
