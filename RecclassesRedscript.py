@@ -111,15 +111,17 @@ class Interfaces:
         self.old = old
         self.hot_post = hot_post
         self.subreddit_POS = subreddit_POS
+        touple_list = [('', None)]
         regex = self.old[len(self.old)-self.old[::-1].index('/')::]
         new = download_path + regex + '.mp4'
         try:
             fallback_url = self.hot_post.media['reddit_video']['fallback_url']
             video_response = requests.get(fallback_url)
-            return [(new, video_response)]
+            touple_list = [(new, video_response)]
         except TypeError:
             cross_post = self.crosspostIDpasser(self.hot_post)
             downloadprocess(cross_post, self.subreddit_POS)
+        return touple_list
 
     def selfpostfunc(self, hot_post):
         self.hot_post = hot_post
