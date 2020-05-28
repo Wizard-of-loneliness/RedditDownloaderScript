@@ -281,12 +281,16 @@ def downloadprocess(hot_post, subreddit_POS):
                     downloadprocess(cross_post, subreddit_POS)
                 except:
                     print("Not a cross-post...Using ID from URL.......")
-                    startindex = old.index('/comments/')+10
-                    endindex = old[startindex::].find('/') + startindex
-                    post_ID = old[startindex:endindex]
-                    print(f'the {post_ID} is found....................')
-                    cross_post = reddit.submission(post_ID)
-                downloadprocess(cross_post, subreddit_POS)
+                    try:
+                        startindex = old.index('/comments/')+10
+                        endindex = old[startindex::].find('/') + startindex
+                        post_ID = old[startindex:endindex]
+                        print(f'the {post_ID} is found....................')
+                        cross_post = reddit.submission(post_ID)
+                        downloadprocess(cross_post, subreddit_POS)
+                    except:
+                        print(
+                            'Download failed check the logs for more Info..........!')
             else:
                 print('Incompatible or unwanted link found............')
                 logging.warning(str(hot_post)+'    ' +
