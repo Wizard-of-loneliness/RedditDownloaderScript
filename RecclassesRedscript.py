@@ -81,7 +81,6 @@ class Interfaces:
         imgurID = self.old[len(self.old)-self.old[::-1].index('/')::]
         header = {'Authorization': f'Client-ID {AuthandGVs.Imgur_ClientID}'}
         file_link_list = []
-        touple_list = [('', None)]
         if ('imgur.com/a/') not in self.old:
             imgurAPI_res = requests.get(
                 f'https://api.imgur.com/3/image/{imgurID}', headers=header)
@@ -111,7 +110,6 @@ class Interfaces:
         self.old = old
         self.hot_post = hot_post
         self.subreddit_POS = subreddit_POS
-        touple_list = [('', None)]
         regex = self.old[len(self.old)-self.old[::-1].index('/')::]
         new = download_path + regex + '.mp4'
         try:
@@ -179,7 +177,7 @@ class Interfaces:
 def downloader(touple_list):
     for tuple_ in touple_list:
         localpath, https_respone = tuple_
-        if (localpath == ''):
+        if (localpath == None):
             print(
                 "Download averted due to passing of null values to Downloader function...........")
         else:
