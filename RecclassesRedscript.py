@@ -23,8 +23,11 @@ try:
     mycurser = mydb.cursor(buffered=True)
 except Exception as e:
     print('\n' + str(e))
-    dbinput = input(
-        'Due to above error, MYSQL Database Dependecy for Downloads is terminated, which may lead to Duplicate Downloads\nDo you wish to continue(Y/N):')
+    print('Due to above error, MYSQL Database Dependecy for Downloads is terminated, which may lead to Duplicate Downloads')
+    while True:
+        dbinput = input('Do you wish to continue(Y/N) :')
+        if dbinput.lower()[0] in ['y', 'n']:
+            break
     if dbinput.lower()[0] == 'y':
         print('\nContinuing Downloads without Database Dependency..........')
         DBconn = False
@@ -93,6 +96,7 @@ class Interfaces:
 
     def imgur(self, old):
         self.old = old
+        touple_list = [(None, None)]
         imgurID = self.old[len(self.old)-self.old[::-1].index('/')::]
         header = {'Authorization': f'Client-ID {AuthandGVs.Imgur_ClientID}'}
         file_link_list = []
@@ -127,6 +131,7 @@ class Interfaces:
         self.subreddit_POS = subreddit_POS
         regex = self.old[len(self.old)-self.old[::-1].index('/')::]
         new = download_path + regex + '.mp4'
+        touple_list = [(None, None)]
         try:
             fallback_url = self.hot_post.media['reddit_video']['fallback_url']
             video_response = requests.get(fallback_url)
@@ -395,7 +400,7 @@ def Sheerdownloadprocess():
 
 print(f'\nDefault value for setting type is {default_setting_type}')
 print(f'Default value for limit is {defaultlimit}')
-print('provide null values to continue with default values......\n')
+print('You can provide null values to continue with default values......\n')
 setting_type = input(
     'select the setting type(hot/top/new/raising/controversial):')
 limit_input = input('Set a limit per subreddit(An Integer value):')
