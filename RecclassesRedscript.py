@@ -6,6 +6,7 @@ import datetime
 import mysql.connector
 import logging
 from xml.dom import minidom
+import sys
 import AuthandGVs
 
 reddit = praw.Reddit(client_id=AuthandGVs.Reddit_client_id,
@@ -16,9 +17,23 @@ reddit = praw.Reddit(client_id=AuthandGVs.Reddit_client_id,
 
 subreddits = AuthandGVs.subreddit_list
 download_path = AuthandGVs.download_path
-mydb = mysql.connector.connect(host="localhost", user=AuthandGVs.mysql_user,
-                               passwd=AuthandGVs.mysql_password, database=AuthandGVs.mysql_database)
-mycurser = mydb.cursor(buffered=True)
+try:
+    mydb = mysql.connector.connect(host="localhost", user=AuthandGVs.mysql_user,
+                                   passwd=AuthandGVs.mysql_password, database=AuthandGVs.mysql_database)
+    mycurser = mydb.cursor(buffered=True)
+except Exception as e:
+    print('\n' + str(e))
+    dbinput = input(
+        'Due to above error, MYSQL Database Dependecy for Downloads is terminated, which may lead to Duplicate Downloads\nDo you wish to continue(Y/N):')
+    if dbinput.lower()[0] == 'y':
+        print('\nContinuing Downloads without Database Dependency..........')
+        DBconn = False
+    if dbinput.lower()[0] == 'n':
+        print('\nPlease check DB GV values(host, user, passwd, database) and try again...Terminating the script...')
+        sys.exit()
+else:
+    DBconn = True
+
 timestamp = str(datetime.datetime.now())
 datep = f"'{timestamp[:10]}'"
 logs_path = AuthandGVs.logs_path
@@ -217,25 +232,32 @@ def showlogs():
 
 class DBInnterfaces:
     def DBchecker(self, hot_post):
-        self.hot_post = hot_post
-        unID = f"'{str(self.hot_post)}'"
-        mycurser.execute(
-            f"select somtinextra from urltable WHERE name = {unID}")
-        downdate = mycurser.fetchone()
-        return downdate
+        if DBconn:
+            self.hot_post = hot_post
+            unID = f"'{str(self.hot_post)}'"
+            mycurser.execute(
+                f"select somtinextra from urltable WHERE name = {unID}")
+            downdate = mycurser.fetchone()
+            return downdate
+        else:
+            return None
 
     def DBcommitter(self, hot_post, subreddit_POS):
-        self.hot_post = hot_post
-        self.subreddit_POS = subreddit_POS
-        unID = f"'{str(self.hot_post)}'"
-        sub_value = f"'{self.subreddit_POS}'"
-        time2date = str(datetime.datetime.fromtimestamp(
-            self.hot_post.created))[:10]
-        post_date = f"'{time2date}'"
-        mycurser.execute(
-            f"insert into urltable values ({unID}, {datep}, {sub_value}, {post_date})")
-        mydb.commit()
-        print(f'New Reddit ID Added to Database.......{str(self.hot_post)}\n')
+        if DBconn:
+            self.hot_post = hot_post
+            self.subreddit_POS = subreddit_POS
+            unID = f"'{str(self.hot_post)}'"
+            sub_value = f"'{self.subreddit_POS}'"
+            time2date = str(datetime.datetime.fromtimestamp(
+                self.hot_post.created))[:10]
+            post_date = f"'{time2date}'"
+            mycurser.execute(
+                f"insert into urltable values ({unID}, {datep}, {sub_value}, {post_date})")
+            mydb.commit()
+            print(
+                f'New Reddit ID Added to Database.......{str(self.hot_post)}\n')
+        else:
+            pass
 
 
 def downloadprocess(hot_post, subreddit_POS):
@@ -405,7 +427,10 @@ for subreddit_POS in subreddits:
         except Exception as e:
             logging.warning(str(hot_post)+'    ' + hot_post.url +
                             '    '+str(e).replace(' ', '_'))
-mydb.close()
+try:
+    mydb.close()
+except:
+    pass
 Sheerdownloadprocess()
 cleanup()
 print(f"\n{NewIDcounter} new post(s) have been downloaded.........\n")
