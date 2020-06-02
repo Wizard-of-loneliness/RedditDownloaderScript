@@ -17,25 +17,31 @@ reddit = praw.Reddit(client_id=AuthandGVs.Reddit_client_id,
 
 subreddits = AuthandGVs.subreddit_list
 download_path = AuthandGVs.download_path
-try:
-    mydb = mysql.connector.connect(host="localhost", user=AuthandGVs.mysql_user,
-                                   passwd=AuthandGVs.mysql_password, database=AuthandGVs.mysql_database)
-    mycurser = mydb.cursor(buffered=True)
-except Exception as e:
-    print('\n' + str(e))
-    print('Due to above error, MYSQL Database Dependecy for Downloads is terminated, which may lead to Duplicate Downloads')
-    while True:
-        dbinput = input('Do you wish to continue(Y/N) :')
-        if dbinput.lower()[0] in ['y', 'n']:
-            break
-    if dbinput.lower()[0] == 'y':
-        print('\nContinuing Downloads without Database Dependency..........')
-        DBconn = False
-    if dbinput.lower()[0] == 'n':
-        print('\nPlease check DB GV values(host, user, passwd, database) and try again...Terminating the script...')
-        sys.exit()
+DBchin = input(
+    '\nDo you want to use DataBase for the Downloads to avoid Duplicate downloads?(Y(or any value)/N) : ')
+if DBchin != '' and DBchin.lower()[0] == 'n':
+    DBconn = False
+    print('\nDatabase dependability terminated...............................')
 else:
-    DBconn = True
+    try:
+        mydb = mysql.connector.connect(host="localhost", user=AuthandGVs.mysql_user,
+                                       passwd=AuthandGVs.mysql_password, database=AuthandGVs.mysql_database)
+        mycurser = mydb.cursor(buffered=True)
+    except Exception as e:
+        print('\n' + str(e))
+        print('Due to above error, MYSQL Database Dependecy for Downloads is terminated, which may lead to Duplicate Downloads')
+        while True:
+            dbinput = input('Do you wish to continue(Y/N) :')
+            if dbinput != '' and dbinput.lower()[0] in ['y', 'n']:
+                break
+        if dbinput.lower()[0] == 'y':
+            print('\nContinuing Downloads without Database Dependency..........')
+            DBconn = False
+        if dbinput.lower()[0] == 'n':
+            print('\nPlease check DB GV values(host, user, passwd, database) and try again...Terminating the script...')
+            sys.exit()
+    else:
+        DBconn = True
 
 timestamp = str(datetime.datetime.now())
 datep = f"'{timestamp[:10]}'"
@@ -53,20 +59,14 @@ sheerlist_dict = {}
 class Interfaces:
     def directimage(self, old):
         self.old = old
-        for media in ['.png', '.jpg', '.jpeg', '.gif', '.mp4']:
-            if media in self.old:
-                subst = media
-                break
-        end_index = self.old.index(subst) + len(subst)
-        regex = self.old[len(self.old)-self.old[::-1].index('/'):end_index:]
-        new = download_path + regex
+        new = download_path + self.old.split('/')[-1]
         image_response = requests.get(self.old)
         return [(new, image_response)]
 
     def gfyvid(self, old):
         self.old = old
         try:
-            gfyID = self.old[len(self.old)-self.old[::-1].index('/')::]
+            gfyID = self.old.split('/')[-1]
             gfyAPI_res = requests.get(
                 f'https://api.gfycat.com/v1/gfycats/{gfyID}')
             gfyJson_res = json.loads(gfyAPI_res.text)
@@ -82,13 +82,10 @@ class Interfaces:
                     html_respone = requests.get(self.old).text
                     start_index = html_respone.find(
                         'og:video:secure_url\" content=') + 30
-                    splitlist = html_respone[start_index::].split('\"')
-                    file_link = splitlist[0]
+                    file_link = html_respone[start_index::].split('\"')[0]
                     print(file_link)
-                    new = download_path + \
-                        file_link[len(file_link)-file_link[::-1].index('/')::]
-                    image_response = requests.get(file_link)
-                    return [(new, image_response)]
+                    touple_list = self.directimage(file_link)
+                    return touple_list
                 except Exception as scrap_error:
                     print(scrap_error)
                     logging.warning(str(hot_post)+'    ' + old +
@@ -97,10 +94,10 @@ class Interfaces:
     def imgur(self, old):
         self.old = old
         touple_list = [(None, None)]
-        imgurID = self.old[len(self.old)-self.old[::-1].index('/')::]
+        imgurID = self.old.split('/')[-1]
         header = {'Authorization': f'Client-ID {AuthandGVs.Imgur_ClientID}'}
         file_link_list = []
-        if ('imgur.com/a/') not in self.old:
+        if (('imgur.com/a/') not in self.old) and (('imgur.com/gallery/') not in self.old):
             imgurAPI_res = requests.get(
                 f'https://api.imgur.com/3/image/{imgurID}', headers=header)
             imgurJson_res = json.loads(imgurAPI_res.text)
@@ -113,14 +110,10 @@ class Interfaces:
             for fille_link_dict in file_link_buffer:
                 file_link_list.append(fille_link_dict['link'])
         if len(file_link_list) < 11:
-            localpath_list, mediares_list = [], []
+            touple_list = []
             for file_link in file_link_list:
-                new = download_path + \
-                    file_link[len(file_link)-file_link[::-1].index('/')::]
-                localpath_list.append(new)
-                media_response = requests.get(file_link)
-                mediares_list.append(media_response)
-            touple_list = list(zip(localpath_list, mediares_list))
+                touple = self.directimage(file_link)[0]
+                touple_list.append(touple)
         else:
             sheerlist_dict[imgurID] = file_link_list
         return touple_list
@@ -129,7 +122,7 @@ class Interfaces:
         self.old = old
         self.hot_post = hot_post
         self.subreddit_POS = subreddit_POS
-        regex = self.old[len(self.old)-self.old[::-1].index('/')::]
+        regex = self.old.split('/')[-1]
         new = download_path + regex + '.mp4'
         touple_list = [(None, None)]
         try:
@@ -145,25 +138,14 @@ class Interfaces:
         self.hot_post = hot_post
         hot_post_valuer = list(self.hot_post.media_metadata.values())
         hot_post_check = list(self.hot_post.media_metadata.values())[0]
-        path_list = []
-        response_list = []
+        touple_list = []
         print('self post found...Extracting data from media metadata....')
         if hot_post_check['e'] == 'Image':
             for hot_post_values in hot_post_valuer:
                 file_link = hot_post_values['s']['u']
                 print(file_link)
-                media_response = requests.get(file_link)
-                response_list.append(media_response)
-                if ('.png' in file_link):
-                    subst = '.png'
-                elif ('.jpg' in file_link):
-                    subst = '.jpg'
-                end_index = file_link.index(subst) + 4
-                regex = file_link[len(file_link) -
-                                  file_link[::-1].index('/'):end_index:]
-                new = download_path + regex
-                path_list.append(new)
-            touple_list = list(zip(path_list, response_list))
+                touple = self.directimage(file_link)[0]
+                touple_list.append(touple)
         elif hot_post_check['e'] == 'RedditVideo':
             urldecoy = str(hot_post_check['dashUrl'])
             dashurlrequest = requests.get(urldecoy)
@@ -182,10 +164,8 @@ class Interfaces:
     def gifvtomp4(self, old):
         self.old = old
         mp4url = self.old.replace('.gifv', '.mp4')
-        video_response = requests.get(mp4url)
-        regex = mp4url[len(mp4url)-mp4url[::-1].index('/')::]
-        new = download_path + regex
-        return [(new, video_response)]
+        touple_list = self.directimage(mp4url)
+        return touple_list
 
     def crosspostIDpasser(self, hot_post):
         self.hot_post = hot_post
@@ -201,12 +181,14 @@ def downloader(touple_list):
             print(
                 "Download averted due to passing of null values to Downloader function...........")
         else:
-            while localpath[-1] not in ['g', 'f', '4']:
+            valid_tuple = ('.jpg', '.png', '.gif', '.jpeg', '.mp4')
+            while not localpath.lower().endswith(valid_tuple):
                 localpath = localpath[:-1]
             with open(localpath, 'wb') as f:
                 f.write(https_respone.content)
             global NewIDcounter
             NewIDcounter += 1
+            f.close()
 
 
 def cleanup(path=download_path):
@@ -330,27 +312,20 @@ def paramsetter(setting_type):
     setterdict1 = {'t': 'top', 'c': 'controversial'}
     range_needs = False
     range_pass = 'no_need'
-    if setting_type == '':
-        param = default_setting_type
-    elif setting_type.lower()[0] in setterdict0:
+    if setting_type != '' and setting_type.lower()[0] in setterdict0:
         param = setterdict0[setting_type.lower()[0]]
-    elif setting_type.lower()[0] in setterdict1:
+    elif setting_type != '' and setting_type.lower()[0] in setterdict1:
         param = setterdict1[setting_type.lower()[0]]
         range_needs = True
     else:
-        print('invalid value error...Proceeding with default parametre')
         param = default_setting_type
     if range_needs:
         ranger = input('select the range(day/week/month/year/all):')
         rangerdict = {'d': 'day', 'w': 'week',
                       'm': 'month', 'y': 'year', 'a': 'all'}
-        if ranger == '':
-            print('proceeding with default value')
-            range_pass = default_range
-        elif ranger.lower()[0] in rangerdict:
+        if ranger != '' and ranger.lower()[0] in rangerdict:
             range_pass = rangerdict[ranger.lower()[0]]
         else:
-            print('invalid value error...Proceeding with default parametre')
             range_pass = default_range
     return param, range_pass
 
