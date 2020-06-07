@@ -8,6 +8,9 @@ import logging
 from xml.dom import minidom
 import sys
 import AuthandGVs
+from time import sleep
+from queue import Queue
+from threading import Thread
 
 reddit = praw.Reddit(client_id=AuthandGVs.Reddit_client_id,
                      client_secret=AuthandGVs.Reddit_client_secret,
@@ -55,6 +58,8 @@ defaultlimit = AuthandGVs.defaultlimit
 NewIDcounter = 0
 Retrylist = []
 sheerlist_dict = {}
+downloaderQueue = Queue()
+download_pauser = 0
 
 
 class Interfaces:
@@ -76,26 +81,20 @@ class Interfaces:
             image_response = requests.get(gfyvid_url)
             return [(new, image_response)]
         except KeyError:
-            print(
-                'Attempting to scrape the link off of HTML response..........')
             html_respone = requests.get(self.old).text
             start_index = html_respone.find(
                 'og:video:secure_url\" content=') + 30
             file_link = html_respone[start_index::].split('\"')[0]
-            print(file_link)
             try:
                 touple_list = self.directimage(file_link)
                 return touple_list
             except requests.exceptions.ChunkedEncodingError:
                 global Retrylist
-                print('Connection error, Adding to the retry list...........')
                 Retrylist.append(file_link)
             except Exception as scrap_error:
-                print(scrap_error)
                 logging.warning(str(hot_post)+'    ' + old +
                                 '    '+str(scrap_error).replace(' ', '_'))
         except Exception as APIerror:
-            print(APIerror)
             logging.warning(str(hot_post)+'    ' + old +
                             '    '+str(APIerror).replace(' ', '_'))
 
@@ -150,11 +149,9 @@ class Interfaces:
         hot_post_valuer = list(self.hot_post.media_metadata.values())
         hot_post_check = list(self.hot_post.media_metadata.values())[0]
         touple_list = []
-        print('self post found...Extracting data from media metadata....')
         if hot_post_check['e'] == 'Image':
             for hot_post_values in hot_post_valuer:
                 file_link = hot_post_values['s']['u']
-                print(file_link)
                 touple = self.directimage(file_link)[0]
                 touple_list.append(touple)
         elif hot_post_check['e'] == 'RedditVideo':
@@ -165,7 +162,6 @@ class Interfaces:
             dash_value = dash_valuestore.firstChild.nodeValue
             indexvalue = urldecoy.index('DASHPlaylist.mpd')
             file_link = urldecoy[:indexvalue] + dash_value
-            print(file_link)
             media_response = requests.get(file_link)
             new = download_path + \
                 list(self.hot_post.media_metadata.keys())[0]+'.mp4'
@@ -198,6 +194,8 @@ class Interfaces:
 
     def listdownloader(self, listoflinks):
         self.listoflinks = listoflinks
+        counter = 1
+        print(f'{len(self.listoflinks)} download(s) failed')
         for link in self.listoflinks:
             try:
                 if '.gifv' in link:
@@ -205,16 +203,17 @@ class Interfaces:
                 else:
                     touple_list = self.directimage(link)
                 downloader(touple_list)
+                print('Downloaded succefully..........')
             except:
-                print('Download(Retry) failed...............')
+                print('Retry failed...........')
+            counter += 1
 
 
 def downloader(touple_list):
     for tuple_ in touple_list:
         localpath, https_respone = tuple_
         if (localpath == None):
-            print(
-                "Download averted due to passing of null values to Downloader function...........")
+            pass
         else:
             valid_tuple = ('.jpg', '.png', '.gif', '.jpeg', '.mp4')
             while not localpath.lower().endswith(valid_tuple):
@@ -292,8 +291,6 @@ def downloadprocess(hot_post, subreddit_POS):
             print(f'ID already found on {downdate[0]}......\n')
         else:
             old = hot_post.url
-            print(hot_post.title + '.'*3)
-            print(old)
             if 'giphy.com' in old:
                 touple_list = Interface.giphyAPI(old)
                 downloader(touple_list)
@@ -318,31 +315,25 @@ def downloadprocess(hot_post, subreddit_POS):
                     touple_list = Interface.selfpostfunc(hot_post)
                     downloader(touple_list)
                 except:
-                    print('Non-media Item found.......................')
+                    logging.warning(str(hot_post)+'    ' + old +
+                                    '    '+'Non-Media_Item_found')
             elif ('/r/' in old) and ('/comments/' in old):
                 try:
                     cross_post = Interface.crosspostIDpasser(hot_post)
-                    print('Cross post found...................')
                     downloadprocess(cross_post, subreddit_POS)
                 except:
-                    print("Not a cross-post...Using ID from URL.......")
                     try:
                         startindex = old.index('/comments/')+10
                         endindex = old[startindex::].find('/') + startindex
                         post_ID = old[startindex:endindex]
-                        print(f'the {post_ID} is found....................')
                         cross_post = reddit.submission(post_ID)
                         downloadprocess(cross_post, subreddit_POS)
                     except:
-                        print(
-                            'Download failed check the logs for more Info..........!')
+                        pass
             else:
-                print('Incompatible or unwanted link found............')
                 logging.warning(str(hot_post)+'    ' +
                                 old+'    '+'Incompatible_Link_error')
             DBInterface.DBcommitter(hot_post, subreddit_POS)
-    else:
-        print('Mod post found........')
 
 
 def paramsetter(setting_type):
@@ -368,6 +359,21 @@ def paramsetter(setting_type):
     return param, range_pass
 
 
+def Queueadder(downloaderQueue):
+    global download_pauser
+    while True:
+        touple_fq = downloaderQueue.get()
+        download_pauser += 1
+        downloaderQueue.task_done()
+        hot_post, subreddit_POS = touple_fq
+        try:
+            downloadprocess(hot_post, subreddit_POS)
+        except Exception as e:
+            logging.warning(str(hot_post)+'    ' + hot_post.url +
+                            '    '+str(e).replace(' ', '_'))
+        download_pauser -= 1
+
+
 def Sheerdownloadprocess():
     if Retrylist == []:
         pass
@@ -377,6 +383,7 @@ def Sheerdownloadprocess():
     if sheerlist_dict == {}:
         print('No links found in sheer Dictionary\n')
     else:
+        print('sheerlist found.......................................')
         serial = 0
         sheerbuffer = {}
         for id, links in sheerlist_dict.items():
@@ -422,9 +429,13 @@ if limit_input == '':
 else:
     limitbuffer = int(limit_input)
 param, range_value = paramsetter(setting_type)
+for _ in range(30):
+    t = Thread(target=Queueadder, args=(downloaderQueue, ), daemon=True)
+    t.start()
+print('\nDownloader threads are started....\n')
 for subreddit_POS in subreddits:
     print(
-        f'******************************************{subreddit_POS}******************************************')
+        f'************************************{subreddit_POS}')
     subreddit = reddit.subreddit(subreddit_POS)
     if range_value == 'no_need':
         if param == 'hot':
@@ -440,11 +451,16 @@ for subreddit_POS in subreddits:
             hot_posts = subreddit.controversial(
                 range_value, limit=limitbuffer)
     for hot_post in hot_posts:
-        try:
-            downloadprocess(hot_post, subreddit_POS)
-        except Exception as e:
-            logging.warning(str(hot_post)+'    ' + hot_post.url +
-                            '    '+str(e).replace(' ', '_'))
+        downloaderQueue.put((hot_post, subreddit_POS))
+print('All posts have been scanned waiting for remaining downloads...........')
+while downloaderQueue.qsize() > 0:
+    print(
+        f'{downloaderQueue.qsize()} download(s) Queued........')
+    sleep(5)
+downloaderQueue.join()
+while download_pauser > 0:
+    print(f'Waiting for {download_pauser} download(s) to complete......')
+    sleep(5)
 try:
     mydb.close()
 except:
@@ -452,4 +468,4 @@ except:
 Sheerdownloadprocess()
 cleanup()
 print(f"\n{NewIDcounter} new post(s) have been downloaded.........\n")
-showlogs()
+# showlogs()
