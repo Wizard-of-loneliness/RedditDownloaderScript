@@ -53,6 +53,7 @@ default_range = AuthandGVs.default_range
 default_setting_type = AuthandGVs.default_setting_type
 defaultlimit = AuthandGVs.defaultlimit
 NewIDcounter = 0
+Retrylist = []
 sheerlist_dict = {}
 
 
@@ -74,27 +75,37 @@ class Interfaces:
             new = download_path + gfyID + '.mp4'
             image_response = requests.get(gfyvid_url)
             return [(new, image_response)]
-        except Exception as gfyAPIError:
-            if str(gfyAPIError) == "'gfyItem'":
-                try:
-                    print(
-                        'Attempting to scrape the link off of HTML response..........')
-                    html_respone = requests.get(self.old).text
-                    start_index = html_respone.find(
-                        'og:video:secure_url\" content=') + 30
-                    file_link = html_respone[start_index::].split('\"')[0]
-                    print(file_link)
-                    touple_list = self.directimage(file_link)
-                    return touple_list
-                except Exception as scrap_error:
-                    print(scrap_error)
-                    logging.warning(str(hot_post)+'    ' + old +
-                                    '    '+str(scrap_error).replace(' ', '_'))
+        except KeyError:
+            print(
+                'Attempting to scrape the link off of HTML response..........')
+            html_respone = requests.get(self.old).text
+            start_index = html_respone.find(
+                'og:video:secure_url\" content=') + 30
+            file_link = html_respone[start_index::].split('\"')[0]
+            print(file_link)
+            try:
+                touple_list = self.directimage(file_link)
+                return touple_list
+            except requests.exceptions.ChunkedEncodingError:
+                global Retrylist
+                print('Connection error, Adding to the retry list...........')
+                Retrylist.append(file_link)
+            except Exception as scrap_error:
+                print(scrap_error)
+                logging.warning(str(hot_post)+'    ' + old +
+                                '    '+str(scrap_error).replace(' ', '_'))
+        except Exception as APIerror:
+            print(APIerror)
+            logging.warning(str(hot_post)+'    ' + old +
+                            '    '+str(APIerror).replace(' ', '_'))
 
     def imgur(self, old):
         self.old = old
         touple_list = [(None, None)]
-        imgurID = self.old.split('/')[-1]
+        try:
+            imgurID = self.old.split('/')[-1].split('_')[0]
+        except:
+            imgurID = self.old.split('/')[-1]
         header = {'Authorization': f'Client-ID {AuthandGVs.Imgur_ClientID}'}
         file_link_list = []
         if (('imgur.com/a/') not in self.old) and (('imgur.com/gallery/') not in self.old):
@@ -172,6 +183,30 @@ class Interfaces:
         cross_post = reddit.submission(
             self.hot_post.crosspost_parent.split('_')[1])
         return cross_post
+
+    def giphyAPI(self, old):
+        self.old = old
+        gifid = self.old.split('/')[self.old.split('/').index('media') + 1]
+        headers = {'api_key': f'{AuthandGVs.giphyAPIKey}'}
+        response = requests.get(
+            f'https://api.giphy.com/v1/gifs/{gifid}', headers=headers)
+        new = download_path + gifid + '.gif'
+        filelink = json.loads(response.text)[
+            'data']['images']['original']['url']
+        media_response = requests.get(filelink)
+        return [(new, media_response)]
+
+    def listdownloader(self, listoflinks):
+        self.listoflinks = listoflinks
+        for link in self.listoflinks:
+            try:
+                if '.gifv' in link:
+                    touple_list = self.gifvtomp4(link)
+                else:
+                    touple_list = self.directimage(link)
+                downloader(touple_list)
+            except:
+                print('Download(Retry) failed...............')
 
 
 def downloader(touple_list):
@@ -259,7 +294,10 @@ def downloadprocess(hot_post, subreddit_POS):
             old = hot_post.url
             print(hot_post.title + '.'*3)
             print(old)
-            if '.gifv' in old:
+            if 'giphy.com' in old:
+                touple_list = Interface.giphyAPI(old)
+                downloader(touple_list)
+            elif '.gifv' in old:
                 touple_list = Interface.gifvtomp4(old)
                 downloader(touple_list)
             elif 'v.redd.it' in old:
@@ -331,6 +369,11 @@ def paramsetter(setting_type):
 
 
 def Sheerdownloadprocess():
+    if Retrylist == []:
+        pass
+    else:
+        Interface = Interfaces()
+        Interface.listdownloader(Retrylist)
     if sheerlist_dict == {}:
         print('No links found in sheer Dictionary\n')
     else:
@@ -365,12 +408,7 @@ def Sheerdownloadprocess():
                     break
             Interface = Interfaces()
             for listoflinks in actual_dict.values():
-                for link in listoflinks:
-                    if '.gifv' in link:
-                        touple_list = Interface.gifvtomp4(link)
-                    else:
-                        touple_list = Interface.directimage(link)
-                    downloader(touple_list)
+                Interface.listdownloader(listoflinks)
 
 
 print(f'\nDefault value for setting type is {default_setting_type}')
