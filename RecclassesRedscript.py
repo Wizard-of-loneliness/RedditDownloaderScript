@@ -7,6 +7,8 @@ import mysql.connector
 import logging
 from xml.dom import minidom
 import sys
+import bs4
+import lxml
 import AuthandGVs
 from time import sleep
 from queue import Queue
@@ -59,7 +61,10 @@ NewIDcounter = 0
 Retrylist = []
 sheerlist_dict = {}
 downloaderQueue = Queue()
+retryQueue = Queue()
 download_pauser = 0
+retry_pauser = 0
+retrycounter = 0
 
 
 class Interfaces:
@@ -81,16 +86,16 @@ class Interfaces:
             image_response = requests.get(gfyvid_url)
             return [(new, image_response)]
         except KeyError:
-            html_respone = requests.get(self.old).text
-            start_index = html_respone.find(
-                'og:video:secure_url\" content=') + 30
-            file_link = html_respone[start_index::].split('\"')[0]
+            soup = bs4.BeautifulSoup(requests.get(self.old).text, 'lxml')
+            if 'gfycat' in self.old:
+                file_link = soup.select('#mp4Source')[0]['src']
+            else:
+                file_link = soup.select('source')[-1]['src']
             try:
                 touple_list = self.directimage(file_link)
                 return touple_list
             except requests.exceptions.ChunkedEncodingError:
-                global Retrylist
-                Retrylist.append(file_link)
+                retryQueue.put(file_link)
             except Exception as scrap_error:
                 logging.warning(str(hot_post)+'    ' + old +
                                 '    '+str(scrap_error).replace(' ', '_'))
@@ -374,12 +379,37 @@ def Queueadder(downloaderQueue):
         download_pauser -= 1
 
 
+def multidownloader(retryQueue):
+    Interface = Interfaces()
+    global retry_pauser, retrycounter
+    while True:
+        filelink_fq = retryQueue.get()
+        retry_pauser += 1
+        retryQueue.task_done()
+        try:
+            touple_rq = Interface.directimage(filelink_fq)
+            downloader(touple_rq)
+            print('Retry/Download Successful..........')
+        except:
+            retrycounter += 1
+        retry_pauser -= 1
+
+
 def Sheerdownloadprocess():
-    if Retrylist == []:
+    if retryQueue.qsize() == 0:
         pass
     else:
-        Interface = Interfaces()
-        Interface.listdownloader(Retrylist)
+        print(f'{retryQueue.qsize()} downloads failed......')
+        for _ in range(30):
+            t = Thread(target=multidownloader,
+                       args=(retryQueue, ), daemon=True)
+            t.start()
+        print('\nRetry threads are started....\n')
+        retryQueue.join()
+        while retry_pauser > 0:
+            print(f'{retry_pauser} download(s) going on...')
+            sleep(5)
+    print(f'{retrycounter} retries failed..........')
     if sheerlist_dict == {}:
         print('No links found in sheer Dictionary\n')
     else:
@@ -392,7 +422,7 @@ def Sheerdownloadprocess():
             print(f'{serial}) No.of links associated with {id} are {len(links)}')
         sheer_input = input(
             "press Y(or anything) to proceed with sheer downloads\npress N to continue without sheer downloads...:")
-        if sheer_input.lower()[0] == 'n':
+        if sheer_input.lower() != '' and sheer_input.lower()[0] == 'n':
             print("Cancelling sheer Downloads.......................... ")
         else:
             actual_dict = {}
@@ -413,9 +443,9 @@ def Sheerdownloadprocess():
                 else:
                     print('values accepted......!')
                     break
-            Interface = Interfaces()
             for listoflinks in actual_dict.values():
-                Interface.listdownloader(listoflinks)
+                for links in listoflinks:
+                    retryQueue.put(links)
 
 
 print(f'\nDefault value for setting type is {default_setting_type}')
@@ -458,7 +488,7 @@ while downloaderQueue.qsize() > 0:
         f'{downloaderQueue.qsize()} download(s) Queued........')
     sleep(5)
 downloaderQueue.join()
-while download_pauser > 0:
+while download_pauser > 1:
     print(f'Waiting for {download_pauser} download(s) to complete......')
     sleep(5)
 try:
@@ -466,6 +496,10 @@ try:
 except:
     pass
 Sheerdownloadprocess()
+while retry_pauser > 0:
+    print(f'{retry_pauser} download(s) going on...')
+    sleep(5)
+retryQueue.join()
 cleanup()
 print(f"\n{NewIDcounter} new post(s) have been downloaded.........\n")
 # showlogs()
