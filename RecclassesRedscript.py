@@ -7,6 +7,8 @@ import mysql.connector
 import logging
 from xml.dom import minidom
 import sys
+import bs4
+import lxml
 import AuthandGVs
 
 reddit = praw.Reddit(client_id=AuthandGVs.Reddit_client_id,
@@ -78,10 +80,11 @@ class Interfaces:
         except KeyError:
             print(
                 'Attempting to scrape the link off of HTML response..........')
-            html_respone = requests.get(self.old).text
-            start_index = html_respone.find(
-                'og:video:secure_url\" content=') + 30
-            file_link = html_respone[start_index::].split('\"')[0]
+            soup = bs4.BeautifulSoup(requests.get(self.old).text, 'lxml')
+            if 'gfycat' in self.old:
+                file_link = soup.select('#mp4Source')[0]['src']
+            else:
+                file_link = soup.select('source')[-1]['src']
             print(file_link)
             try:
                 touple_list = self.directimage(file_link)
