@@ -61,10 +61,8 @@ NewIDcounter = 0
 Retrylist = []
 sheerlist_dict = {}
 downloaderQueue = Queue()
-retryQueue = Queue()
 download_pauser = 0
-retry_pauser = 0
-retrycounter = 0
+loopbreakerlist = []
 
 
 class Interfaces:
@@ -95,7 +93,7 @@ class Interfaces:
                 touple_list = self.directimage(file_link)
                 return touple_list
             except requests.exceptions.ChunkedEncodingError:
-                retryQueue.put(file_link)
+                downloaderQueue.put(file_link)
             except Exception as scrap_error:
                 logging.warning(str(hot_post)+'    ' + old +
                                 '    '+str(scrap_error).replace(' ', '_'))
@@ -197,21 +195,17 @@ class Interfaces:
         media_response = requests.get(filelink)
         return [(new, media_response)]
 
-    def listdownloader(self, listoflinks):
-        self.listoflinks = listoflinks
-        counter = 1
-        print(f'{len(self.listoflinks)} download(s) failed')
-        for link in self.listoflinks:
-            try:
-                if '.gifv' in link:
-                    touple_list = self.gifvtomp4(link)
-                else:
-                    touple_list = self.directimage(link)
-                downloader(touple_list)
-                print('Downloaded succefully..........')
-            except:
-                print('Retry failed...........')
-            counter += 1
+    def listdownloader(self, link):
+        self.link = link
+        try:
+            if '.gifv' in self.link:
+                touple_list = self.gifvtomp4(self.link)
+            else:
+                touple_list = self.directimage(self.link)
+            downloader(touple_list)
+            print('Downloaded succefully..........')
+        except:
+            print('Retry/Download failed...........')
 
 
 def downloader(touple_list):
@@ -370,46 +364,24 @@ def Queueadder(downloaderQueue):
         touple_fq = downloaderQueue.get()
         download_pauser += 1
         downloaderQueue.task_done()
-        hot_post, subreddit_POS = touple_fq
-        try:
-            downloadprocess(hot_post, subreddit_POS)
-        except Exception as e:
-            logging.warning(str(hot_post)+'    ' + hot_post.url +
-                            '    '+str(e).replace(' ', '_'))
+        if type(touple_fq) == tuple:
+            hot_post, subreddit_POS = touple_fq
+            try:
+                downloadprocess(hot_post, subreddit_POS)
+            except Exception as e:
+                logging.warning(str(hot_post)+'    ' + hot_post.url +
+                                '    '+str(e).replace(' ', '_'))
+        else:
+            Interface = Interfaces()
+            try:
+                Interface.listdownloader(touple_fq)
+            except Exception as e1:
+                logging.warning(str(hot_post)+'    ' +
+                                hot_post.url + '    '+str(e1).replace(' ', '_'))
         download_pauser -= 1
 
 
-def multidownloader(retryQueue):
-    Interface = Interfaces()
-    global retry_pauser, retrycounter
-    while True:
-        filelink_fq = retryQueue.get()
-        retry_pauser += 1
-        retryQueue.task_done()
-        try:
-            touple_rq = Interface.directimage(filelink_fq)
-            downloader(touple_rq)
-            print('Retry/Download Successful..........')
-        except:
-            retrycounter += 1
-        retry_pauser -= 1
-
-
 def Sheerdownloadprocess():
-    if retryQueue.qsize() == 0:
-        pass
-    else:
-        print(f'{retryQueue.qsize()} downloads failed......')
-        for _ in range(30):
-            t = Thread(target=multidownloader,
-                       args=(retryQueue, ), daemon=True)
-            t.start()
-        print('\nRetry threads are started....\n')
-        retryQueue.join()
-        while retry_pauser > 0:
-            print(f'{retry_pauser} download(s) going on...')
-            sleep(5)
-    print(f'{retrycounter} retries failed..........')
     if sheerlist_dict == {}:
         print('No links found in sheer Dictionary\n')
     else:
@@ -444,8 +416,12 @@ def Sheerdownloadprocess():
                     print('values accepted......!')
                     break
             for listoflinks in actual_dict.values():
-                for links in listoflinks:
-                    retryQueue.put(links)
+                for link in listoflinks:
+                    downloaderQueue.put(link)
+    global download_pauser
+    while download_pauser > 1:
+        print(f'Waiting for {download_pauser} download(s) to complete......')
+        sleep(5)
 
 
 print(f'\nDefault value for setting type is {default_setting_type}')
@@ -488,18 +464,25 @@ while downloaderQueue.qsize() > 0:
         f'{downloaderQueue.qsize()} download(s) Queued........')
     sleep(5)
 downloaderQueue.join()
-while download_pauser > 1:
+while download_pauser > 0:
     print(f'Waiting for {download_pauser} download(s) to complete......')
-    sleep(5)
+    loopbreakerlist.append(download_pauser)
+    stopcount = 0
+    for i in range(0, len(loopbreakerlist)-1):
+        if loopbreakerlist[i] == loopbreakerlist[i+1]:
+            stopcount += 1
+        else:
+            stopcount = 0
+    if stopcount > 13:
+        download_pauser = 0
+        print(
+            f'Cancelling {download_pauser} download(s) due to thread error....')
+    sleep(4)
 try:
     mydb.close()
 except:
     pass
 Sheerdownloadprocess()
-while retry_pauser > 0:
-    print(f'{retry_pauser} download(s) going on...')
-    sleep(5)
-retryQueue.join()
 cleanup()
 print(f"\n{NewIDcounter} new post(s) have been downloaded.........\n")
 # showlogs()
