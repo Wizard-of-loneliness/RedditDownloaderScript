@@ -418,6 +418,7 @@ def Sheerdownloadprocess():
             for listoflinks in actual_dict.values():
                 for link in listoflinks:
                     downloaderQueue.put(link)
+            sleep(2)
     global download_pauser
     while download_pauser > 1:
         print(f'Waiting for {download_pauser} download(s) to complete......')
@@ -474,9 +475,10 @@ while download_pauser > 0:
         else:
             stopcount = 0
     if stopcount > 13:
+        temp_count = download_pauser
         download_pauser = 0
         print(
-            f'Cancelling {download_pauser} download(s) due to thread error....')
+            f'Cancelling {temp_count} download(s) due to thread error....')
     sleep(4)
 try:
     mydb.close()
