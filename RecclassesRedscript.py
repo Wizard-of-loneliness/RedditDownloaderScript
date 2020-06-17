@@ -409,12 +409,13 @@ def Sheerdownloadprocess():
                 for link in listoflinks:
                     downloaderQueue.put(link)
             sleep(2)
-    print('Waiting for Download queue to be empty.......')
-    downloaderQueue.join()
-    global download_pauser
-    while download_pauser > 1:
-        print(f'Waiting for {download_pauser} download(s) to complete......')
-        sleep(5)
+        print('Waiting for Download queue to be empty.......')
+        downloaderQueue.join()
+        global download_pauser
+        while download_pauser > 1:
+            print(
+                f'Waiting for {download_pauser} download(s) to complete......')
+            sleep(5)
 
 
 print(f'\nDefault value for setting type is {default_setting_type}')
