@@ -203,9 +203,8 @@ class Interfaces:
             else:
                 touple_list = self.directimage(self.link)
             downloader(touple_list)
-            print('Downloaded succefully..........')
         except:
-            print('Retry/Download failed...........')
+            pass
 
 
 def downloader(touple_list):
@@ -274,65 +273,56 @@ class DBInnterfaces:
             mycurser.execute(
                 f"insert into urltable values ({unID}, {datep}, {sub_value}, {post_date})")
             mydb.commit()
-            print(
-                f'New Reddit ID Added to Database.......{str(self.hot_post)}\n')
         else:
             pass
 
 
 def downloadprocess(hot_post, subreddit_POS):
     Interface = Interfaces()
-    DBInterface = DBInnterfaces()
     if not hot_post.stickied:
-        downdate = DBInterface.DBchecker(hot_post)
-        if downdate:
-            print(hot_post.url)
-            print(f'ID already found on {downdate[0]}......\n')
-        else:
-            old = hot_post.url
-            if 'giphy.com' in old:
-                touple_list = Interface.giphyAPI(old)
+        old = hot_post.url
+        if 'giphy.com' in old:
+            touple_list = Interface.giphyAPI(old)
+            downloader(touple_list)
+        elif '.gifv' in old:
+            touple_list = Interface.gifvtomp4(old)
+            downloader(touple_list)
+        elif 'v.redd.it' in old:
+            touple_list = Interface.RedditVideo(
+                old, hot_post, subreddit_POS)
+            downloader(touple_list)
+        elif ('.png' in old) or ('.jpg' in old) or ('.gif' in old) or ('.jpeg' in old) or ('.mp4' in old):
+            touple_list = Interface.directimage(old)
+            downloader(touple_list)
+        elif ('www.reddit.com' not in old) and (('gfycat.com' in old) or ('redgifs' in old)):
+            touple_list = Interface.gfyvid(old)
+            downloader(touple_list)
+        elif ('imgur.com/' in old):
+            touple_list = Interface.imgur(old)
+            downloader(touple_list)
+        elif hot_post.is_self:
+            try:
+                touple_list = Interface.selfpostfunc(hot_post)
                 downloader(touple_list)
-            elif '.gifv' in old:
-                touple_list = Interface.gifvtomp4(old)
-                downloader(touple_list)
-            elif 'v.redd.it' in old:
-                touple_list = Interface.RedditVideo(
-                    old, hot_post, subreddit_POS)
-                downloader(touple_list)
-            elif ('.png' in old) or ('.jpg' in old) or ('.gif' in old) or ('.jpeg' in old) or ('.mp4' in old):
-                touple_list = Interface.directimage(old)
-                downloader(touple_list)
-            elif ('gfycat.com' in old) or ('redgifs' in old):
-                touple_list = Interface.gfyvid(old)
-                downloader(touple_list)
-            elif ('imgur.com/' in old):
-                touple_list = Interface.imgur(old)
-                downloader(touple_list)
-            elif hot_post.is_self:
+            except:
+                logging.warning(str(hot_post)+'    ' + old +
+                                '    '+'Non-Media_Item_found')
+        elif ('/r/' in old) and ('/comments/' in old):
+            try:
+                cross_post = Interface.crosspostIDpasser(hot_post)
+                downloadprocess(cross_post, subreddit_POS)
+            except:
                 try:
-                    touple_list = Interface.selfpostfunc(hot_post)
-                    downloader(touple_list)
-                except:
-                    logging.warning(str(hot_post)+'    ' + old +
-                                    '    '+'Non-Media_Item_found')
-            elif ('/r/' in old) and ('/comments/' in old):
-                try:
-                    cross_post = Interface.crosspostIDpasser(hot_post)
+                    startindex = old.index('/comments/')+10
+                    endindex = old[startindex::].find('/') + startindex
+                    post_ID = old[startindex:endindex]
+                    cross_post = reddit.submission(post_ID)
                     downloadprocess(cross_post, subreddit_POS)
                 except:
-                    try:
-                        startindex = old.index('/comments/')+10
-                        endindex = old[startindex::].find('/') + startindex
-                        post_ID = old[startindex:endindex]
-                        cross_post = reddit.submission(post_ID)
-                        downloadprocess(cross_post, subreddit_POS)
-                    except:
-                        pass
-            else:
-                logging.warning(str(hot_post)+'    ' +
-                                old+'    '+'Incompatible_Link_error')
-            DBInterface.DBcommitter(hot_post, subreddit_POS)
+                    pass
+        else:
+            logging.warning(str(hot_post)+'    ' + old +
+                            '    '+'Incompatible_Link_error')
 
 
 def paramsetter(setting_type):
@@ -419,6 +409,8 @@ def Sheerdownloadprocess():
                 for link in listoflinks:
                     downloaderQueue.put(link)
             sleep(2)
+    print('Waiting for Download queue to be empty.......')
+    downloaderQueue.join()
     global download_pauser
     while download_pauser > 1:
         print(f'Waiting for {download_pauser} download(s) to complete......')
@@ -440,6 +432,7 @@ for _ in range(30):
     t = Thread(target=Queueadder, args=(downloaderQueue, ), daemon=True)
     t.start()
 print('\nDownloader threads are started....\n')
+DBInterface = DBInnterfaces()
 for subreddit_POS in subreddits:
     print(
         f'************************************{subreddit_POS}')
@@ -458,7 +451,10 @@ for subreddit_POS in subreddits:
             hot_posts = subreddit.controversial(
                 range_value, limit=limitbuffer)
     for hot_post in hot_posts:
-        downloaderQueue.put((hot_post, subreddit_POS))
+        downdate = DBInterface.DBchecker(hot_post)
+        if not downdate:
+            downloaderQueue.put((hot_post, subreddit_POS))
+            DBInterface.DBcommitter(hot_post, subreddit_POS)
 print('All posts have been scanned waiting for remaining downloads...........')
 while downloaderQueue.qsize() > 0:
     print(
@@ -475,10 +471,9 @@ while download_pauser > 0:
         else:
             stopcount = 0
     if stopcount > 13:
-        temp_count = download_pauser
-        download_pauser = 0
         print(
-            f'Cancelling {temp_count} download(s) due to thread error....')
+            f'Cancelling {download_pauser} download(s) due to thread error....')
+        download_pauser = 0
     sleep(4)
 try:
     mydb.close()
