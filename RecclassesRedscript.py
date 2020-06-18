@@ -435,8 +435,6 @@ for _ in range(30):
 print('\nDownloader threads are started....\n')
 DBInterface = DBInnterfaces()
 for subreddit_POS in subreddits:
-    print(
-        f'************************************{subreddit_POS}')
     subreddit = reddit.subreddit(subreddit_POS)
     if range_value == 'no_need':
         if param == 'hot':
@@ -451,11 +449,15 @@ for subreddit_POS in subreddits:
         else:
             hot_posts = subreddit.controversial(
                 range_value, limit=limitbuffer)
+    newpost_counter = 0
     for hot_post in hot_posts:
         downdate = DBInterface.DBchecker(hot_post)
         if not downdate:
             downloaderQueue.put((hot_post, subreddit_POS))
+            newpost_counter += 1
             DBInterface.DBcommitter(hot_post, subreddit_POS)
+    print(
+        f'************************************{subreddit_POS}({newpost_counter})')
 print('All posts have been scanned waiting for remaining downloads...........')
 while downloaderQueue.qsize() > 0:
     print(
