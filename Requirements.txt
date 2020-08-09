@@ -1,0 +1,5 @@
+praw
+mysql
+bs4
+lxml
+
