@@ -3,7 +3,10 @@ import requests
 import json
 import os
 import datetime
-import mysql.connector
+try:
+    import mysql.connector
+except:
+    pass
 import logging
 from xml.dom import minidom
 import sys
