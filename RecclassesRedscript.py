@@ -17,6 +17,12 @@ from time import sleep
 from queue import Queue
 from threading import Thread
 
+gowithDe = False
+try:
+    if 'd' in sys.argv[1]:
+        gowithDe = True
+except:
+    pass
 reddit = praw.Reddit(client_id=AuthandGVs.Reddit_client_id,
                      client_secret=AuthandGVs.Reddit_client_secret,
                      username=AuthandGVs.Reddit_username,
@@ -25,15 +31,18 @@ reddit = praw.Reddit(client_id=AuthandGVs.Reddit_client_id,
 
 subreddits = AuthandGVs.subreddit_list
 download_path = AuthandGVs.download_path
-DBchin = input(
-    '\nDo you want to use DataBase for the Downloads to avoid Duplicate downloads?(Y(or any value)/N) : ')
+if not gowithDe:
+    DBchin = input(
+        '\nDo you want to use DataBase for the Downloads to avoid Duplicate downloads?(Y(or any value)/N) : ')
+else:
+    print('Assuming everything\'s fine and proceeding with default values, Disabling sheer downloads...')
+    DBchin = ''
 if DBchin != '' and DBchin.lower()[0] == 'n':
     DBconn = False
     print('\nDatabase dependability terminated...............................')
 else:
     try:
-        mydb = mysql.connector.connect(host="localhost", user=AuthandGVs.mysql_user,
-                                       passwd=AuthandGVs.mysql_password, database=AuthandGVs.mysql_database)
+        mydb = mysql.connector.connect(host="localhost", user=AuthandGVs.mysql_user, passwd=AuthandGVs.mysql_password, database=AuthandGVs.mysql_database)
         mycurser = mydb.cursor(buffered=True)
     except Exception as e:
         print('\n' + str(e))
@@ -375,8 +384,8 @@ def Queueadder(downloaderQueue):
 
 
 def Sheerdownloadprocess():
-    if sheerlist_dict == {}:
-        print('No links found in sheer Dictionary\n')
+    if sheerlist_dict == {} or gowithDe:
+        pass
     else:
         print('sheerlist found.......................................')
         serial = 0
@@ -423,10 +432,13 @@ def Sheerdownloadprocess():
 
 print(f'\nDefault value for setting type is {default_setting_type}')
 print(f'Default value for limit is {defaultlimit}')
-print('You can provide null values to continue with default values......\n')
-setting_type = input(
-    'select the setting type(hot/top/new/raising/controversial):')
-limit_input = input('Set a limit per subreddit(An Integer value):')
+if not gowithDe:
+    setting_type = input(
+        'select the setting type(hot/top/new/raising/controversial):')
+    limit_input = input('Set a limit per subreddit(An Integer value):')
+else:
+    setting_type = ''
+    limit_input = ''
 if limit_input == '':
     limitbuffer = defaultlimit
 else:
@@ -435,7 +447,7 @@ param, range_value = paramsetter(setting_type)
 for _ in range(30):
     t = Thread(target=Queueadder, args=(downloaderQueue, ), daemon=True)
     t.start()
-print('\nDownloader threads are started....\n')
+print('\nDownloader threads have been started....\n')
 DBInterface = DBInnterfaces()
 for subreddit_POS in subreddits:
     subreddit = reddit.subreddit(subreddit_POS)
