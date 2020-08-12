@@ -13,7 +13,16 @@ import sys
 import bs4
 import lxml
 import AuthandGVs
+from time import sleep
+from queue import Queue
+from threading import Thread
 
+gowithDe = False
+try:
+    if 'd' in sys.argv[1]:
+        gowithDe = True
+except:
+    pass
 reddit = praw.Reddit(client_id=AuthandGVs.Reddit_client_id,
                      client_secret=AuthandGVs.Reddit_client_secret,
                      username=AuthandGVs.Reddit_username,
@@ -22,15 +31,18 @@ reddit = praw.Reddit(client_id=AuthandGVs.Reddit_client_id,
 
 subreddits = AuthandGVs.subreddit_list
 download_path = AuthandGVs.download_path
-DBchin = input(
-    '\nDo you want to use DataBase for the Downloads to avoid Duplicate downloads?(Y(or any value)/N) : ')
+if not gowithDe:
+    DBchin = input(
+        '\nDo you want to use DataBase for the Downloads to avoid Duplicate downloads?(Y(or any value)/N) : ')
+else:
+    print('Assuming everything\'s fine and proceeding with default values, Disabling sheer downloads...')
+    DBchin = ''
 if DBchin != '' and DBchin.lower()[0] == 'n':
     DBconn = False
     print('\nDatabase dependability terminated...............................')
 else:
     try:
-        mydb = mysql.connector.connect(host="localhost", user=AuthandGVs.mysql_user,
-                                       passwd=AuthandGVs.mysql_password, database=AuthandGVs.mysql_database)
+        mydb = mysql.connector.connect(host="localhost", user=AuthandGVs.mysql_user, passwd=AuthandGVs.mysql_password, database=AuthandGVs.mysql_database)
         mycurser = mydb.cursor(buffered=True)
     except Exception as e:
         print('\n' + str(e))
@@ -60,6 +72,9 @@ defaultlimit = AuthandGVs.defaultlimit
 NewIDcounter = 0
 Retrylist = []
 sheerlist_dict = {}
+downloaderQueue = Queue()
+download_pauser = 0
+loopbreakerlist = []
 
 
 class Interfaces:
@@ -81,27 +96,29 @@ class Interfaces:
             image_response = requests.get(gfyvid_url)
             return [(new, image_response)]
         except KeyError:
+<<<<<<< HEAD
             print(
                 'Attempting to scrape the link off of HTML response..........')
+=======
+>>>>>>> multidownloads
             soup = bs4.BeautifulSoup(requests.get(self.old).text, 'lxml')
             if 'gfycat' in self.old:
                 file_link = soup.select('#mp4Source')[0]['src']
             else:
                 file_link = soup.select('source')[-1]['src']
+<<<<<<< HEAD
             print(file_link)
+=======
+>>>>>>> multidownloads
             try:
                 touple_list = self.directimage(file_link)
                 return touple_list
             except requests.exceptions.ChunkedEncodingError:
-                global Retrylist
-                print('Connection error, Adding to the retry list...........')
-                Retrylist.append(file_link)
+                downloaderQueue.put(file_link)
             except Exception as scrap_error:
-                print(scrap_error)
                 logging.warning(str(hot_post)+'    ' + old +
                                 '    '+str(scrap_error).replace(' ', '_'))
         except Exception as APIerror:
-            print(APIerror)
             logging.warning(str(hot_post)+'    ' + old +
                             '    '+str(APIerror).replace(' ', '_'))
 
@@ -156,11 +173,9 @@ class Interfaces:
         hot_post_valuer = list(self.hot_post.media_metadata.values())
         hot_post_check = list(self.hot_post.media_metadata.values())[0]
         touple_list = []
-        print('self post found...Extracting data from media metadata....')
         if hot_post_check['e'] == 'Image':
             for hot_post_values in hot_post_valuer:
                 file_link = hot_post_values['s']['u']
-                print(file_link)
                 touple = self.directimage(file_link)[0]
                 touple_list.append(touple)
         elif hot_post_check['e'] == 'RedditVideo':
@@ -171,7 +186,6 @@ class Interfaces:
             dash_value = dash_valuestore.firstChild.nodeValue
             indexvalue = urldecoy.index('DASHPlaylist.mpd')
             file_link = urldecoy[:indexvalue] + dash_value
-            print(file_link)
             media_response = requests.get(file_link)
             new = download_path + \
                 list(self.hot_post.media_metadata.keys())[0]+'.mp4'
@@ -202,25 +216,23 @@ class Interfaces:
         media_response = requests.get(filelink)
         return [(new, media_response)]
 
-    def listdownloader(self, listoflinks):
-        self.listoflinks = listoflinks
-        for link in self.listoflinks:
-            try:
-                if '.gifv' in link:
-                    touple_list = self.gifvtomp4(link)
-                else:
-                    touple_list = self.directimage(link)
-                downloader(touple_list)
-            except:
-                print('Download(Retry) failed...............')
+    def listdownloader(self, link):
+        self.link = link
+        try:
+            if '.gifv' in self.link:
+                touple_list = self.gifvtomp4(self.link)
+            else:
+                touple_list = self.directimage(self.link)
+            downloader(touple_list)
+        except:
+            pass
 
 
 def downloader(touple_list):
     for tuple_ in touple_list:
         localpath, https_respone = tuple_
         if (localpath == None):
-            print(
-                "Download averted due to passing of null values to Downloader function...........")
+            pass
         else:
             valid_tuple = ('.jpg', '.png', '.gif', '.jpeg', '.mp4')
             while not localpath.lower().endswith(valid_tuple):
@@ -282,73 +294,56 @@ class DBInnterfaces:
             mycurser.execute(
                 f"insert into urltable values ({unID}, {datep}, {sub_value}, {post_date})")
             mydb.commit()
-            print(
-                f'New Reddit ID Added to Database.......{str(self.hot_post)}\n')
         else:
             pass
 
 
 def downloadprocess(hot_post, subreddit_POS):
     Interface = Interfaces()
-    DBInterface = DBInnterfaces()
     if not hot_post.stickied:
-        downdate = DBInterface.DBchecker(hot_post)
-        if downdate:
-            print(hot_post.url)
-            print(f'ID already found on {downdate[0]}......\n')
-        else:
-            old = hot_post.url
-            print(hot_post.title + '.'*3)
-            print(old)
-            if 'giphy.com' in old:
-                touple_list = Interface.giphyAPI(old)
+        old = hot_post.url
+        if 'giphy.com' in old:
+            touple_list = Interface.giphyAPI(old)
+            downloader(touple_list)
+        elif '.gifv' in old:
+            touple_list = Interface.gifvtomp4(old)
+            downloader(touple_list)
+        elif 'v.redd.it' in old:
+            touple_list = Interface.RedditVideo(
+                old, hot_post, subreddit_POS)
+            downloader(touple_list)
+        elif ('.png' in old) or ('.jpg' in old) or ('.gif' in old) or ('.jpeg' in old) or ('.mp4' in old):
+            touple_list = Interface.directimage(old)
+            downloader(touple_list)
+        elif ('www.reddit.com' not in old) and (('gfycat.com' in old) or ('redgifs' in old)):
+            touple_list = Interface.gfyvid(old)
+            downloader(touple_list)
+        elif ('imgur.com/' in old):
+            touple_list = Interface.imgur(old)
+            downloader(touple_list)
+        elif hot_post.is_self:
+            try:
+                touple_list = Interface.selfpostfunc(hot_post)
                 downloader(touple_list)
-            elif '.gifv' in old:
-                touple_list = Interface.gifvtomp4(old)
-                downloader(touple_list)
-            elif 'v.redd.it' in old:
-                touple_list = Interface.RedditVideo(
-                    old, hot_post, subreddit_POS)
-                downloader(touple_list)
-            elif ('.png' in old) or ('.jpg' in old) or ('.gif' in old) or ('.jpeg' in old) or ('.mp4' in old):
-                touple_list = Interface.directimage(old)
-                downloader(touple_list)
-            elif ('gfycat.com' in old) or ('redgifs' in old):
-                touple_list = Interface.gfyvid(old)
-                downloader(touple_list)
-            elif ('imgur.com/' in old):
-                touple_list = Interface.imgur(old)
-                downloader(touple_list)
-            elif hot_post.is_self:
+            except:
+                logging.warning(str(hot_post)+'    ' + old +
+                                '    '+'Non-Media_Item_found')
+        elif ('/r/' in old) and ('/comments/' in old):
+            try:
+                cross_post = Interface.crosspostIDpasser(hot_post)
+                downloadprocess(cross_post, subreddit_POS)
+            except:
                 try:
-                    touple_list = Interface.selfpostfunc(hot_post)
-                    downloader(touple_list)
-                except:
-                    print('Non-media Item found.......................')
-            elif ('/r/' in old) and ('/comments/' in old):
-                try:
-                    cross_post = Interface.crosspostIDpasser(hot_post)
-                    print('Cross post found...................')
+                    startindex = old.index('/comments/')+10
+                    endindex = old[startindex::].find('/') + startindex
+                    post_ID = old[startindex:endindex]
+                    cross_post = reddit.submission(post_ID)
                     downloadprocess(cross_post, subreddit_POS)
                 except:
-                    print("Not a cross-post...Using ID from URL.......")
-                    try:
-                        startindex = old.index('/comments/')+10
-                        endindex = old[startindex::].find('/') + startindex
-                        post_ID = old[startindex:endindex]
-                        print(f'the {post_ID} is found....................')
-                        cross_post = reddit.submission(post_ID)
-                        downloadprocess(cross_post, subreddit_POS)
-                    except:
-                        print(
-                            'Download failed check the logs for more Info..........!')
-            else:
-                print('Incompatible or unwanted link found............')
-                logging.warning(str(hot_post)+'    ' +
-                                old+'    '+'Incompatible_Link_error')
-            DBInterface.DBcommitter(hot_post, subreddit_POS)
-    else:
-        print('Mod post found........')
+                    pass
+        else:
+            logging.warning(str(hot_post)+'    ' + old +
+                            '    '+'Incompatible_Link_error')
 
 
 def paramsetter(setting_type):
@@ -374,15 +369,34 @@ def paramsetter(setting_type):
     return param, range_pass
 
 
+def Queueadder(downloaderQueue):
+    global download_pauser
+    while True:
+        touple_fq = downloaderQueue.get()
+        download_pauser += 1
+        downloaderQueue.task_done()
+        if type(touple_fq) == tuple:
+            hot_post, subreddit_POS = touple_fq
+            try:
+                downloadprocess(hot_post, subreddit_POS)
+            except Exception as e:
+                logging.warning(str(hot_post)+'    ' + hot_post.url +
+                                '    '+str(e).replace(' ', '_'))
+        else:
+            Interface = Interfaces()
+            try:
+                Interface.listdownloader(touple_fq)
+            except Exception as e1:
+                logging.warning(str(hot_post)+'    ' +
+                                hot_post.url + '    '+str(e1).replace(' ', '_'))
+        download_pauser -= 1
+
+
 def Sheerdownloadprocess():
-    if Retrylist == []:
+    if sheerlist_dict == {} or gowithDe:
         pass
     else:
-        Interface = Interfaces()
-        Interface.listdownloader(Retrylist)
-    if sheerlist_dict == {}:
-        print('No links found in sheer Dictionary\n')
-    else:
+        print('sheerlist found.......................................')
         serial = 0
         sheerbuffer = {}
         for id, links in sheerlist_dict.items():
@@ -391,7 +405,7 @@ def Sheerdownloadprocess():
             print(f'{serial}) No.of links associated with {id} are {len(links)}')
         sheer_input = input(
             "press Y(or anything) to proceed with sheer downloads\npress N to continue without sheer downloads...:")
-        if sheer_input.lower()[0] == 'n':
+        if sheer_input.lower() != '' and sheer_input.lower()[0] == 'n':
             print("Cancelling sheer Downloads.......................... ")
         else:
             actual_dict = {}
@@ -412,25 +426,39 @@ def Sheerdownloadprocess():
                 else:
                     print('values accepted......!')
                     break
-            Interface = Interfaces()
             for listoflinks in actual_dict.values():
-                Interface.listdownloader(listoflinks)
+                for link in listoflinks:
+                    downloaderQueue.put(link)
+            sleep(2)
+        print('Waiting for Download queue to be empty.......')
+        downloaderQueue.join()
+        global download_pauser
+        while download_pauser > 1:
+            print(
+                f'Waiting for {download_pauser} download(s) to complete......')
+            sleep(5)
 
 
 print(f'\nDefault value for setting type is {default_setting_type}')
 print(f'Default value for limit is {defaultlimit}')
-print('You can provide null values to continue with default values......\n')
-setting_type = input(
-    'select the setting type(hot/top/new/raising/controversial):')
-limit_input = input('Set a limit per subreddit(An Integer value):')
+if not gowithDe:
+    setting_type = input(
+        'select the setting type(hot/top/new/raising/controversial):')
+    limit_input = input('Set a limit per subreddit(An Integer value):')
+else:
+    setting_type = ''
+    limit_input = ''
 if limit_input == '':
     limitbuffer = defaultlimit
 else:
     limitbuffer = int(limit_input)
 param, range_value = paramsetter(setting_type)
+for _ in range(30):
+    t = Thread(target=Queueadder, args=(downloaderQueue, ), daemon=True)
+    t.start()
+print('\nDownloader threads have been started....\n')
+DBInterface = DBInnterfaces()
 for subreddit_POS in subreddits:
-    print(
-        f'******************************************{subreddit_POS}******************************************')
     subreddit = reddit.subreddit(subreddit_POS)
     if range_value == 'no_need':
         if param == 'hot':
@@ -445,12 +473,35 @@ for subreddit_POS in subreddits:
         else:
             hot_posts = subreddit.controversial(
                 range_value, limit=limitbuffer)
+    newpost_counter = 0
     for hot_post in hot_posts:
-        try:
-            downloadprocess(hot_post, subreddit_POS)
-        except Exception as e:
-            logging.warning(str(hot_post)+'    ' + hot_post.url +
-                            '    '+str(e).replace(' ', '_'))
+        downdate = DBInterface.DBchecker(hot_post)
+        if not downdate:
+            downloaderQueue.put((hot_post, subreddit_POS))
+            newpost_counter += 1
+            DBInterface.DBcommitter(hot_post, subreddit_POS)
+    print(
+        f'************************************{subreddit_POS}({newpost_counter})')
+print('All posts have been scanned waiting for remaining downloads...........')
+while downloaderQueue.qsize() > 0:
+    print(
+        f'{downloaderQueue.qsize()} download(s) Queued........')
+    sleep(5)
+downloaderQueue.join()
+while download_pauser > 0:
+    print(f'Waiting for {download_pauser} download(s) to complete......')
+    loopbreakerlist.append(download_pauser)
+    stopcount = 0
+    for i in range(0, len(loopbreakerlist)-1):
+        if loopbreakerlist[i] == loopbreakerlist[i+1]:
+            stopcount += 1
+        else:
+            stopcount = 0
+    if stopcount > 13:
+        print(
+            f'Cancelling {download_pauser} download(s) due to thread error....')
+        download_pauser = 0
+    sleep(4)
 try:
     mydb.close()
 except:
@@ -458,4 +509,4 @@ except:
 Sheerdownloadprocess()
 cleanup()
 print(f"\n{NewIDcounter} new post(s) have been downloaded.........\n")
-showlogs()
+# showlogs()
