@@ -96,20 +96,11 @@ class Interfaces:
             image_response = requests.get(gfyvid_url)
             return [(new, image_response)]
         except KeyError:
-<<<<<<< HEAD
-            print(
-                'Attempting to scrape the link off of HTML response..........')
-=======
->>>>>>> multidownloads
             soup = bs4.BeautifulSoup(requests.get(self.old).text, 'lxml')
             if 'gfycat' in self.old:
                 file_link = soup.select('#mp4Source')[0]['src']
             else:
                 file_link = soup.select('source')[-1]['src']
-<<<<<<< HEAD
-            print(file_link)
-=======
->>>>>>> multidownloads
             try:
                 touple_list = self.directimage(file_link)
                 return touple_list
