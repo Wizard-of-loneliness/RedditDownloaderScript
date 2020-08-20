@@ -312,6 +312,9 @@ def downloadprocess(hot_post, subreddit_POS):
         elif ('imgur.com/' in old):
             touple_list = Interface.imgur(old)
             downloader(touple_list)
+        elif ('reddit.com/gallery/' in old):
+            touple_list = Interface.selfpostfunc(hot_post)
+            downloader(touple_list)
         elif hot_post.is_self:
             try:
                 touple_list = Interface.selfpostfunc(hot_post)
